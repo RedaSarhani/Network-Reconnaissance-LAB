@@ -80,4 +80,36 @@ Isolated RST packets — both closed-port refusals and the half-open SYN-scan te
 
 <img width="1917" height="1042" alt="image" src="https://github.com/user-attachments/assets/a546e990-651e-4475-ac99-0bf26a22eb1b" />
 
+**Filter:** `tcp.port==22`
+
+Traced the full exchange on port 22 to compare scan behavior directly:
+- SYN scan (`-sS`): SYN → SYN-ACK → RST (or RST, ACK) — connection torn down immediately, three packets only
+- Connect scan (`-sT`): SYN → SYN-ACK → ACK — full handshake completed
+- Immediately after the `-sT` handshake, a real SSH banner exchange occurred (`SSH-2.0-OpenSSH_4.7p1 Debian-8ubuntu1`), followed by a clean FIN/ACK teardown
+
+This is the clearest evidence of *why* connect scans are noisier and more detectable than SYN scans: `-sT` doesn't just complete the handshake, it holds the connection open long enough for the target service to respond with real application data (its version banner) — the exact mechanism `-sV` uses to fingerprint services.
+
+<img width="1917" height="357" alt="image" src="https://github.com/user-attachments/assets/b43bc065-09e6-404c-a863-49ef2b0a46e3" />
+
+## Findings
+- Metasploitable2 had 23 open ports out of 1000 scanned via both `-sS` and `-sT` — port states matched exactly between scan types, confirming the method (half-open vs full handshake) doesn't change what's reported, only how it's obtained.
+- `-sV` fingerprinted every open service, revealing several intentionally vulnerable/backdoored versions: **vsftpd 2.3.4** (21), **UnrealIRCd** (6667), and a pre-planted **"Metasploitable root shell"** bound directly to port 1524 (ingreslock); no exploitation needed to identify it, just version detection.
+- Wireshark confirmed the packet-level difference between scan types on port 22: the SYN scan (`-sS`) completed SYN → SYN-ACK → RST in 3 packets, while the connect scan (`-sT`) completed the full handshake (SYN → SYN-ACK → ACK) and stayed open long enough for the SSH server to send its actual version banner before a clean FIN/ACK teardown.
+- The SYN packet filter showed a dense, rapid burst of connections from a single source IP across many destination ports — the core signature any IDS/SIEM port-scan detection rule is built on.
+
+## Defender View
+A SIEM or IDS watching this traffic would flag it as a port scan based on the rapid one-source-to-many-ports SYN pattern seen in the filtered capture; this is exactly what rule sets like Suricata's `ET SCAN` category are built to catch. On its own, this activity is low-severity background noise (constant across the public internet). It would warrant escalation if:
+- It originated from inside the network rather than an external source
+- It was followed by a successful, sustained connection to a sensitive port (SSH, RDP, database ports) from the same source IP
+- The scanned host responded with fingerprintable service banners (as seen on port 22) — since that's the difference between "someone knows a host exists" and "someone knows exactly what's running on it and can now look up matching exploits"
+
+The pre-planted root shell backdoor on port 1524 is the kind of finding that, in a real environment, would be a critical/immediate escalation regardless of scan type — an unauthenticated root shell exposed on the network isn't a "monitor and see" situation.
+
+## Common Mistakes / Troubleshooting
+- Typo in `/etc/network/interfaces` (`adress` instead of `address`) caused Metasploitable2's eth0 to fail to come up — fixed by correcting the keyword.
+- `ip addr add` on Kali's `eth1` only persists until reboot — needs to be set via NetworkManager for permanence.
+- Ran all scans into one long capture instead of stopping/restarting Wireshark between each — made isolating individual scans harder and relied more heavily on display filters than would've been necessary with separate captures.
+
+## What I'd Do Differently
+Had a hard time reading Wireshark at first — the packet list is dense, and it took a few filters and re-reads to actually connect what I was seeing to which Nmap command caused it. Next time I'd capture each scan type in its own file to make that connection more obvious, and spend a bit more time just reading raw (unfiltered) traffic before jumping straight to filters.
 
