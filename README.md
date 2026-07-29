@@ -66,5 +66,18 @@ Key findings:
 
 <img width="1592" height="867" alt="image" src="https://github.com/user-attachments/assets/5e715352-3a4b-4a92-8272-a2f276647838" />
 
+### 7. Analyze the capture in Wireshark
+
+**Filter:** `tcp.flags.syn==1 && tcp.flags.ack==0`
+
+Isolated the initial SYN packets sent by both the `-sS` and `-sT` scans. Result: a dense, rapid sequence of SYN packets from 192.168.56.10 (Kali) to 192.168.56.20 (Metasploitable2) across many destination ports in a very short time window — the classic port scan signature a SIEM/IDS threshold rule would key on (e.g. "N distinct destination ports from one source IP within Y seconds").
+
+<img width="1917" height="1047" alt="image" src="https://github.com/user-attachments/assets/f2733e6f-d0c0-4632-9aa9-3f2d1fdf85e4" />
+
+**Filter:** `tcp.flags.reset==1`
+
+Isolated RST packets — both closed-port refusals and the half-open SYN-scan teardowns. Selected packet example: source port 587 → destination port 60082, flags `0x014 (RST, ACK)`, confirming a completed exchange being reset rather than a fresh refusal.
+
+<img width="1917" height="1042" alt="image" src="https://github.com/user-attachments/assets/a546e990-651e-4475-ac99-0bf26a22eb1b" />
 
 
