@@ -80,6 +80,7 @@ Isolated RST packets — both closed-port refusals and the half-open SYN-scan te
 
 <img width="1917" height="1042" alt="image" src="https://github.com/user-attachments/assets/a546e990-651e-4475-ac99-0bf26a22eb1b" />
 
+
 **Filter:** `tcp.port==22`
 
 Traced the full exchange on port 22 to compare scan behavior directly:
